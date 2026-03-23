@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package matchmaker;
+
+option go_package = "github.com/Haruncakir/snakeio_clone/pkg/gen/pb/matchmaker";
+
+// RegisterNodeReq is sent by a Game Node to announce itself to the Matchmaker.
+message RegisterNodeReq {
+  string node_id   = 1;  // unique identifier for this game node
+  string address   = 2;  // host:port the node is listening on for WebSockets
+  int32  capacity  = 3;  // max concurrent players this node can handle
+}
+
+message RegisterNodeResp {
+  bool accepted = 1;
+}
+
+// HeartbeatReq is sent periodically by Game Nodes to signal liveness.
+message HeartbeatReq {
+  string node_id       = 1;
+  int32  current_load  = 2;  // current number of connected players
+}
+
+message HeartbeatResp {
+  bool   acknowledged = 1;
+  bool   drain        = 2;  // if true, node should stop accepting new players
+}
+
+// MatchReq is sent by the Gateway on behalf of a client requesting a game.
+message MatchReq {
+  string player_id = 1;
+}
+
+// MatchResp tells the client which Game Node to connect to.
+message MatchResp {
+  bool   matched    = 1;
+  string node_id    = 2;
+  string node_addr  = 3;  // direct WebSocket address, e.g. "gamenode-1:8080"
+  string token      = 4;  // session token for auth on the Game Node
+}
+
+service Matchmaker {
+  // RegisterNode is called by a Game Node at startup.
+  rpc RegisterNode(RegisterNodeReq) returns (RegisterNodeResp);
+
+  // Heartbeat is called periodically by Game Nodes.
+  rpc Heartbeat(HeartbeatReq) returns (HeartbeatResp);
+
+  // RequestMatch is called by the Gateway to place a player.
+  rpc RequestMatch(MatchReq) returns (MatchResp);
+}

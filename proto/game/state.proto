@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package game;
+
+option go_package = "github.com/Haruncakir/snakeio_clone/pkg/gen/pb/game";
+
+// Position is a 2D coordinate on the game grid.
+message Position {
+  float x = 1;
+  float y = 2;
+}
+
+// Direction encodes the snake's heading.
+enum Direction {
+  DIRECTION_UNSPECIFIED = 0;
+  DIRECTION_UP          = 1;
+  DIRECTION_DOWN        = 2;
+  DIRECTION_LEFT        = 3;
+  DIRECTION_RIGHT       = 4;
+}
+
+// Snake represents a single player's snake state.
+message Snake {
+  string            player_id  = 1;
+  string            name       = 2;
+  repeated Position segments   = 3;  // head is segments[0]
+  Direction         direction  = 4;
+  float             speed      = 5;
+  int32             score      = 6;
+  bool              alive      = 7;
+}
+
+// Food is a collectible item on the map.
+message Food {
+  string   id       = 1;
+  Position position = 2;
+  int32    value    = 3;  // score points when consumed
+}
+
+// GameState is the full tick payload broadcast to all clients via WebSocket.
+message GameState {
+  int64          tick      = 1;  // monotonically increasing tick counter
+  repeated Snake snakes    = 2;
+  repeated Food  foods     = 3;
+  float          arena_w   = 4;  // arena width
+  float          arena_h   = 5;  // arena height
+}
+
+// PlayerInput is sent from client to Game Node over WebSocket.
+message PlayerInput {
+  Direction direction = 1;
+  bool      boost     = 2;  // speed boost (burns score)
+}

@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package gamenode;
+
+option go_package = "github.com/Haruncakir/snakeio_clone/pkg/gen/pb/gamenode";
+
+// AssignPlayerReq is sent by the Matchmaker to a Game Node to assign a player.
+message AssignPlayerReq {
+  string player_id = 1;
+  string token     = 2;  // session token the player will present on WS connect
+}
+
+message AssignPlayerResp {
+  bool   accepted = 1;
+  string reason   = 2;  // non-empty if rejected (e.g. "node full")
+}
+
+// DrainReq tells the Game Node to stop accepting new players (graceful shutdown).
+message DrainReq {}
+
+message DrainResp {
+  int32 remaining_players = 1;  // how many players are still in active games
+}
+
+service GameNode {
+  // AssignPlayer reserves a slot for an incoming player.
+  rpc AssignPlayer(AssignPlayerReq) returns (AssignPlayerResp);
+
+  // DrainNode initiates graceful drain: finish current games, reject new ones.
+  rpc DrainNode(DrainReq) returns (DrainResp);
+}
