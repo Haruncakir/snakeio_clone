@@ -1,6 +1,6 @@
 module github.com/Haruncakir/snakeio_clone/services/gamenode
 
-go 1.23.0
+go 1.24.0
 
 replace github.com/Haruncakir/snakeio_clone/pkg => ../../pkg
 
