@@ -1,6 +1,25 @@
-version: "3.9"
+# ══════════════════════════════════════════════════════════════════════
+# Snake.io — Full Stack Docker Compose
+#
+# Services:
+#   redis       — Matchmaking queue backend
+#   postgres    — Player stats & leaderboards
+#   matchmaker  — gRPC matchmaking service
+#   gamenode-1  — Game Node #1 (WebSocket + gRPC)
+#   gamenode-2  — Game Node #2 (demonstrates horizontal scaling)
+#   gateway     — REST API gateway (public entry point)
+#
+# Usage:
+#   docker compose up -d              # start everything
+#   docker compose logs -f gateway    # follow gateway logs
+#   docker compose ps                 # check health
+#   docker compose down -v            # tear down + remove volumes
+# ══════════════════════════════════════════════════════════════════════
 
 services:
+
+  # ── Infrastructure ───────────────────────────────────────────────
+
   redis:
     image: redis:7-alpine
     container_name: snakeio-redis
@@ -8,12 +27,13 @@ services:
       - "6379:6379"
     volumes:
       - redis-data:/data
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
+    restart: unless-stopped
 
   postgres:
     image: postgres:16-alpine
@@ -32,6 +52,117 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    restart: unless-stopped
+
+  # ── Matchmaker ─────────────────────────────────────────────────
+
+  matchmaker:
+    build:
+      context: .
+      dockerfile: deployments/matchmaker.Dockerfile
+    container_name: snakeio-matchmaker
+    ports:
+      - "50051:50051"
+    environment:
+      GRPC_PORT: "50051"
+      REDIS_ADDR: "redis:6379"
+      HEARTBEAT_INTERVAL: "5s"
+      LOG_LEVEL: "info"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 50051 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # ── Game Nodes (horizontally scalable) ─────────────────────────
+
+  gamenode-1:
+    build:
+      context: .
+      dockerfile: deployments/gamenode.Dockerfile
+    container_name: snakeio-gamenode-1
+    ports:
+      - "8081:8080"
+      - "50052:50051"
+    environment:
+      NODE_ID: "gamenode-1"
+      HTTP_PORT: "8080"
+      GRPC_PORT: "50051"
+      MATCHMAKER_ADDR: "matchmaker:50051"
+      TICK_RATE: "50ms"
+      ARENA_WIDTH: "2000"
+      ARENA_HEIGHT: "2000"
+      MAX_PLAYERS: "50"
+      HEARTBEAT_INTERVAL: "5s"
+      LOG_LEVEL: "info"
+    depends_on:
+      matchmaker:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  gamenode-2:
+    build:
+      context: .
+      dockerfile: deployments/gamenode.Dockerfile
+    container_name: snakeio-gamenode-2
+    ports:
+      - "8082:8080"
+      - "50053:50051"
+    environment:
+      NODE_ID: "gamenode-2"
+      HTTP_PORT: "8080"
+      GRPC_PORT: "50051"
+      MATCHMAKER_ADDR: "matchmaker:50051"
+      TICK_RATE: "50ms"
+      ARENA_WIDTH: "2000"
+      ARENA_HEIGHT: "2000"
+      MAX_PLAYERS: "50"
+      HEARTBEAT_INTERVAL: "5s"
+      LOG_LEVEL: "info"
+    depends_on:
+      matchmaker:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # ── API Gateway ────────────────────────────────────────────────
+
+  gateway:
+    build:
+      context: .
+      dockerfile: deployments/gateway.Dockerfile
+    container_name: snakeio-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      HTTP_PORT: "8080"
+      MATCHMAKER_ADDR: "matchmaker:50051"
+      POSTGRES_DSN: "postgres://snakeio:snakeio_secret@postgres:5432/snakeio?sslmode=disable"
+      LOG_LEVEL: "info"
+    depends_on:
+      matchmaker:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
 
 volumes:
   redis-data:
